@@ -22,13 +22,18 @@ bone_fracture_detection/
 │   ├── model.py          # ResNet-50 model implementation
 │   ├── explain.py        # Explainability techniques (Grad-CAM, LIME, SHAP)
 │   └── utils.py          # Utility functions for image processing and visualization
-├── data/
-│   ├── download.py       # Script to download MURA dataset
-│   └── sample.jpg        # Placeholder for sample X-ray image
+├── model/
+│   ├── training/
+│   │   ├── fractured/    # Training images with fractures
+│   │   └── not_fractured/ # Training images without fractures
+│   └── testing/
+│       ├── fractured/    # Testing images with fractures
+│       └── not_fractured/ # Testing images without fractures
 ├── notebooks/
 │   └── comparative_analysis.ipynb  # Jupyter notebook for XAI comparison
 ├── models/               # Directory for saved model weights
 ├── results/              # Directory for output heatmaps and explanations
+├── gradio_gui.py         # Gradio-based web interface for predictions
 ├── main.py               # Main script for prediction and explanation
 ├── train.py              # Training script for fine-tuning the model
 ├── requirements.txt      # Python dependencies
@@ -59,16 +64,20 @@ bone_fracture_detection/
 
 ## Dataset
 
-it utilizes a custom dataset containing images of both fractured and non-fractured bones.
+The project utilizes a custom dataset containing X-ray images of both fractured and non-fractured bones.
 
-1. The dataset structure should be:
-   ```
-   data/
-   ├── fractured/
-   └── not_fractured/
-   ```
+The dataset is organized in the `model/` directory with the following structure:
+```
+model/
+├── training/
+│   ├── fractured/    # Training images with fractures
+│   └── not_fractured/ # Training images without fractures
+└── testing/
+    ├── fractured/    # Testing images with fractures
+    └── not_fractured/ # Testing images without fractures
+```
 
-Alternatively, place your own X-ray dataset in the `data/` directory following a similar structure.
+Place your own X-ray dataset in the `model/` directory following the same structure for training and testing splits.
 
 ## Training
 
@@ -82,12 +91,26 @@ This will train the model and save weights to `models/fracture_detection_model.p
 
 ## Usage
 
-### Prediction and Explanation
+### Web Interface (Recommended)
+
+Launch the Gradio-based web interface for easy image upload and prediction:
+
+```bash
+python gradio_gui.py
+```
+
+The interface will open in your web browser, allowing you to:
+- Upload X-ray images
+- Get instant predictions with confidence scores
+- View Grad-CAM heatmaps highlighting fracture areas
+- Read textual explanations of the model's decision
+
+### Command Line Prediction
 
 Run the main script with a sample X-ray image:
 
 ```bash
-python main.py data/sample.jpg --save
+python main.py path/to/your/xray_image.jpg --save
 ```
 
 - `--model_path`: Path to trained model (optional, uses pre-trained ResNet-50 if not provided)
