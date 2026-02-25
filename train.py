@@ -4,11 +4,9 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from PIL import Image
 import os
+import matplotlib.pyplot as plt
 from src.model import FractureDetectionModel, get_transforms
 
-# -------------------------------
-# Dataset Class
-# -------------------------------
 class BoneFractureDataset(Dataset):
     def __init__(self, root_dir, transform=None):
         self.transform = transform
@@ -42,54 +40,52 @@ class BoneFractureDataset(Dataset):
 
         return image, label
 
-# -------------------------------
-# Training Function
-# -------------------------------
+
 def train_model(data_dir):
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    BATCH_SIZE = 8  # smaller batch size for CPU
-    EPOCHS = 5      # start small for testing
+    BATCH_SIZE = 8
+    EPOCHS = 3   # 👈 quick retraining for graph
+
     print(f"Using device: {DEVICE}")
 
     transform = get_transforms()
 
-    # Datasets and loaders
     train_dataset = BoneFractureDataset(os.path.join(data_dir, "training"), transform)
     val_dataset = BoneFractureDataset(os.path.join(data_dir, "testing"), transform)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    # Model
     model = FractureDetectionModel().to(DEVICE)
 
-    # Load previous weights if available
     model_path = "models/fracture_detection_model.pth"
     if os.path.exists(model_path):
         model.load_state_dict(torch.load(model_path, map_location=DEVICE), strict=False)
-        print("✅ Loaded previous model weights (partial, ignored mismatches)")
+        print("✅ Loaded previous model weights")
 
-    # Freeze backbone
     for param in model.resnet.parameters():
         param.requires_grad = False
 
-    # Unfreeze last block + classifier
     for param in model.resnet.layer4.parameters():
         param.requires_grad = True
+
     for param in model.resnet.fc.parameters():
         param.requires_grad = True
 
-    # Loss and optimizer
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam([
         {"params": model.resnet.layer4.parameters(), "lr": 1e-4},
         {"params": model.resnet.fc.parameters(), "lr": 1e-3}
     ])
 
-    # Training loop with batch progress
+    train_acc_list = []
+    val_acc_list = []
+
     for epoch in range(EPOCHS):
         model.train()
         running_loss = 0.0
+        correct_train = 0
+        total_train = 0
 
         for i, (images, labels) in enumerate(train_loader):
             images, labels = images.to(DEVICE), labels.to(DEVICE)
@@ -102,14 +98,17 @@ def train_model(data_dir):
 
             running_loss += loss.item()
 
-            # Print batch progress every 5 batches
-            if i % 5 == 0:
-                print(f"Epoch {epoch+1}/{EPOCHS}, Batch {i+1}/{len(train_loader)}, Loss: {loss.item():.4f}")
+            _, predicted = torch.max(outputs, 1)
+            total_train += labels.size(0)
+            correct_train += (predicted == labels).sum().item()
 
-        # Validation
+        train_acc = 100 * correct_train / total_train
+        train_acc_list.append(train_acc)
+
         model.eval()
         correct = 0
         total = 0
+
         with torch.no_grad():
             for images, labels in val_loader:
                 images, labels = images.to(DEVICE), labels.to(DEVICE)
@@ -119,18 +118,31 @@ def train_model(data_dir):
                 correct += (predicted == labels).sum().item()
 
         val_acc = 100 * correct / total
+        val_acc_list.append(val_acc)
+
         print(f"Epoch [{epoch+1}/{EPOCHS}] "
-              f"Avg Loss: {running_loss/len(train_loader):.4f} "
-              f"Val Acc: {val_acc:.2f}%\n")
+              f"Loss: {running_loss/len(train_loader):.4f} "
+              f"Train Acc: {train_acc:.2f}% "
+              f"Val Acc: {val_acc:.2f}%")
 
-    # Save model
     os.makedirs("models", exist_ok=True)
-    torch.save(model.state_dict(), "models/fracture_detection_model.pth")
-    print("✅ Model saved to models/fracture_detection_model.pth")
+    torch.save(model.state_dict(), model_path)
 
-# -------------------------------
-# Main
-# -------------------------------
+    # 📊 Accuracy Graph
+    epochs_range = range(1, EPOCHS + 1)
+    plt.plot(epochs_range, train_acc_list, label="Training Accuracy")
+    plt.plot(epochs_range, val_acc_list, label="Validation Accuracy")
+    plt.xlabel("Epochs")
+    plt.ylabel("Accuracy (%)")
+    plt.title("Training vs Validation Accuracy")
+    plt.legend()
+
+    plt.savefig("models/accuracy_graph.png")
+    plt.show()
+
+    print("✅ Accuracy graph saved to models/accuracy_graph.png")
+
+
 if __name__ == "__main__":
     train_model("model")
 
